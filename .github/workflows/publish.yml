@@ -1,0 +1,69 @@
+name: Publish Netmaker
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version
+        required: true
+        default: v1.7.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-netmaker
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'rock1881/netmaker'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    env:
+      VERSION: ${{ inputs.version }}
+      IMAGE: ghcr.io/rock1881/netmaker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Validate release input
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(git ls-remote origin "refs/tags/$VERSION" | cut -f1)" = "$GITHUB_SHA"
+      - name: Test and build CE
+        run: |
+          mkdir -p dist
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD:/app" -w /app \
+            gravitl/go-builder:1.26.0@sha256:5ba9960b9a9cb998eade0c00d4af6d131e3309748179396d0c470c992d70be52 \
+            sh -ec 'go test -tags ce ./logic -run "(?i)(acl|cedirection|peer)" -count=1; CGO_ENABLED=1 go build -tags ce -buildvcs=false -ldflags="-s -w" -o dist/netmaker .'
+      - name: Build image and public download assets
+        run: |
+          cp local/acl-direction/Dockerfile.server dist/Dockerfile
+          cp LICENSE.md dist/LICENSE.md
+          docker build --platform linux/amd64 \
+            --label org.opencontainers.image.source=https://github.com/rock1881/netmaker \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --label org.opencontainers.image.version="$VERSION" \
+            -t "$IMAGE:$VERSION" dist
+          mkdir -p dist/downloads
+          docker save "$IMAGE:$VERSION" | gzip -n > "dist/downloads/netmaker-$VERSION-docker-linux-amd64.tar.gz"
+          python3 scripts/release/package.py --binary dist/netmaker --output dist/downloads --version "$VERSION"
+      - name: Push container image
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:$VERSION"
+      - name: Publish release downloads
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" dist/downloads/* --clobber
+          else
+            gh release create "$VERSION" dist/downloads/* --target "$GITHUB_SHA" --title "Netmaker $VERSION" --notes-file scripts/release/README.md
+          fi

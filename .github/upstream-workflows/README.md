@@ -1,0 +1,1 @@
+Upstream workflow definitions are preserved here for reference. This fork uses only ../workflows/publish.yml, with repository-scoped credentials. Upstream cloud deployment, enterprise publishing and ticket integrations are not run by this fork.

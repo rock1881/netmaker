@@ -1,3 +1,7 @@
+> **rock1881 Netmaker fork** — Community Edition v1.7.0 with selectable device-policy direction.
+> See [downloads and installation](https://github.com/rock1881/netmaker/releases) and
+> [release documentation](scripts/release/README.md). Images use `ghcr.io/rock1881/netmaker:v1.7.0`.
+
 
 <p align="center">
   <a href="https://netmaker.io">

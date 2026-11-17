@@ -2,3 +2,4 @@ config/dnsconfig/
 data/
 /.git
 /*.tar
+/.local-artifacts/
