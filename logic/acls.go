@@ -984,7 +984,18 @@ func GetStaticNodeIps(ctx context.Context, node models.Node) (ips []net.IP) {
 
 var CleanupGwsMigration = func(ctx context.Context) {}
 
+// Local CE change (2026-11-17): directional device policies require explicit
+// firewall rules on both ends. Do not use the network-wide ACCEPT shortcut.
+// Evaluate every node in a network containing a one-way policy; this also covers
+// static clients and transit gateways without duplicating policy matching here.
 var CheckIfAnyPolicyisUniDirectional = func(targetNode models.Node, acls []models.Acl) bool {
+	for _, acl := range acls {
+		if acl.Enabled && acl.RuleType == models.DevicePolicy &&
+			acl.NetworkID.String() == targetNode.Network &&
+			acl.AllowedDirection == models.TrafficDirectionUni {
+			return true
+		}
+	}
 	return false
 }
 
@@ -1048,6 +1059,10 @@ func GetAclRulesForNode(ctx context.Context, targetnodeI *models.Node) (rules ma
 	}
 	targetNodeTags[models.TagID(targetnode.ID.String())] = struct{}{}
 	targetNodeTags["*"] = struct{}{}
+	// The built-in CE gateway group must also match explicit firewall rules.
+	if targetnode.IsGw {
+		targetNodeTags[models.TagID(fmt.Sprintf("%s.%s", targetnode.Network, models.GwTagName))] = struct{}{}
+	}
 	for _, acl := range acls {
 		if !acl.Enabled {
 			continue
@@ -2299,10 +2314,11 @@ func checkIfAclTagisValid(ctx context.Context, a models.Acl, t models.AclPolicyT
 
 var IsAclPolicyValid = func(ctx context.Context, acl models.Acl) (err error) {
 
-	//check if src and dst are valid
-	if acl.AllowedDirection == models.TrafficDirectionUni {
-		return errors.New("uni traffic flow not allowed on CE")
+	// Local CE change: accept the two defined directions, reject invalid values.
+	if acl.AllowedDirection != models.TrafficDirectionUni && acl.AllowedDirection != models.TrafficDirectionBi {
+		return errors.New("invalid allowed traffic direction")
 	}
+	//check if src and dst are valid
 	switch acl.RuleType {
 
 	case models.DevicePolicy:
@@ -2523,12 +2539,7 @@ func MigrateAclPolicies(ctx context.Context) {
 			acl.Port = []string{}
 			UpsertAcl(ctx, acl)
 		}
-		if !servercfg.IsPro {
-			if acl.AllowedDirection == models.TrafficDirectionUni {
-				acl.AllowedDirection = models.TrafficDirectionBi
-				UpsertAcl(ctx, acl)
-			}
-		}
+		// Local CE change: preserve the administrator-selected direction on restart.
 	}
 
 }

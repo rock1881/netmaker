@@ -27,3 +27,6 @@ netmaker.exe
 netmaker.code-workspace
 dist/
 nmctl
+
+# Local build artifacts and captured release packages
+.local-artifacts/

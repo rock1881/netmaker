@@ -1,0 +1,4 @@
+FROM gravitl/netmaker-ui@sha256:405a587af73bab233f4406b3b1b876369d0b0bfdc2dedb308a537226a502a8ba
+COPY index-acl-direction-5c0e5d0a.js /usr/share/nginx/html/assets/index-acl-direction-5c0e5d0a.js
+RUN sed -i 's|/assets/index-DrhEsdGo.js|/assets/index-acl-direction-5c0e5d0a.js|' /usr/share/nginx/html/index.html
+LABEL local.netmaker.patch="ce-acl-direction-20261117"
